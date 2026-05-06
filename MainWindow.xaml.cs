@@ -1126,6 +1126,103 @@ namespace XTimelineViewer
             await webView.CoreWebView2.ExecuteScriptAsync(BuildHideHeaderJs(hide));
         }
 
+        private static bool IsListPageUrl(string currentUrl)
+        {
+            if (!Uri.TryCreate(currentUrl, UriKind.Absolute, out var uri)) return false;
+            return uri.AbsolutePath.Contains("/i/lists/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string BuildHideListHeaderJs(bool hide) => $$"""
+            (function(enabled) {
+                window._xtvHideListHeaderEnabled = enabled;
+
+                var styleId = 'xtv-hide-list-header-style';
+                var hiddenClass = 'xtv-hidden-list-header';
+
+                function ensureStyle() {
+                    var s = document.getElementById(styleId);
+                    if (!s) {
+                        s = document.createElement('style');
+                        s.id = styleId;
+                        s.textContent = '.' + hiddenClass + '{display:none!important}';
+                        (document.head || document.documentElement).appendChild(s);
+                    }
+                }
+
+                function isListHeaderCell(cell) {
+                    if (cell.querySelector('article[data-testid="tweet"]')) return false;
+                    return !!cell.querySelector(
+                        'a[href*="/i/lists/"][href$="/members"],' +
+                        'a[href*="/i/lists/"][href*="/members?"],' +
+                        'a[href*="/i/lists/"][href*="/members#"],' +
+                        'a[href*="/i/lists/"][href$="/followers"],' +
+                        'a[href*="/i/lists/"][href*="/followers?"],' +
+                        'a[href*="/i/lists/"][href*="/followers#"],' +
+                        'a[href*="/i/lists/"][href$="/info"],' +
+                        'a[href*="/i/lists/"][href*="/info?"],' +
+                        'a[href*="/i/lists/"][href*="/info#"]'
+                    );
+                }
+
+                function apply() {
+                    var enabledNow = !!window._xtvHideListHeaderEnabled;
+                    if (enabledNow) ensureStyle();
+
+                    document.querySelectorAll('[data-testid="cellInnerDiv"]').forEach(function(cell) {
+                        if (enabledNow && isListHeaderCell(cell)) {
+                            cell.classList.add(hiddenClass);
+                        } else {
+                            cell.classList.remove(hiddenClass);
+                        }
+                    });
+                }
+
+                if (!window._xtvHideListHeaderInstalled) {
+                    window._xtvHideListHeaderInstalled = true;
+
+                    var timer = null;
+                    function schedule() {
+                        clearTimeout(timer);
+                        timer = setTimeout(apply, 50);
+                    }
+
+                    var observer = new MutationObserver(schedule);
+                    function observe() {
+                        if (document.body) {
+                            observer.observe(document.body, { childList: true, subtree: true });
+                        }
+                    }
+
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', observe, { once: true });
+                    } else {
+                        observe();
+                    }
+
+                    var pushState = history.pushState;
+                    var replaceState = history.replaceState;
+                    history.pushState = function() {
+                        var result = pushState.apply(this, arguments);
+                        schedule();
+                        return result;
+                    };
+                    history.replaceState = function() {
+                        var result = replaceState.apply(this, arguments);
+                        schedule();
+                        return result;
+                    };
+                    window.addEventListener('popstate', schedule);
+                }
+
+                apply();
+            })({{(hide ? "true" : "false")}});
+            """;
+
+        private static async Task ApplyHideListHeaderAsync(WebView2 webView, bool hide)
+        {
+            await webView.CoreWebView2.ExecuteScriptAsync(BuildHideListHeaderJs(hide));
+        }
+
         private static async Task ApplyAutoShowNewPostsAsync(WebView2 webView, string cfgUrl)
         {
             if (!Uri.TryCreate(cfgUrl, UriKind.Absolute, out var uri)) return;
@@ -1395,6 +1492,7 @@ namespace XTimelineViewer
                 {
                     await ApplyHideHeaderAsync(webView, cfg.HideHeader);
                     await ApplyHideComposeAsync(webView, EffectiveHideCompose(cfg, webView.CoreWebView2.Source));
+                    await ApplyHideListHeaderAsync(webView, IsListPageUrl(webView.CoreWebView2.Source));
                     await ApplyDimThemeAsync(webView);
 
                     // TweetInterceptScript のフラグを設定と同期する
@@ -1415,6 +1513,7 @@ namespace XTimelineViewer
             {
                 if (cfg.HideCompose)
                     await ApplyHideComposeAsync(webView, EffectiveHideCompose(cfg, webView.CoreWebView2.Source));
+                await ApplyHideListHeaderAsync(webView, IsListPageUrl(webView.CoreWebView2.Source));
             };
 
             webView.Source = new Uri(cfg.Url);
