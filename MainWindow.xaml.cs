@@ -812,6 +812,109 @@ namespace XTimelineViewer
 
         // ── Persistence ───────────────────────────────────────────────────────
 
+        private static string BuildTimelineScrollbarJs() => """
+            (function() {
+                var styleId = 'xtv-timeline-scrollbar-style';
+                var scrollingClass = 'xtv-scrolling';
+                var hoverClass = 'xtv-scrollbar-hover';
+                var overlayId = 'xtv-timeline-scrollbar-overlay';
+                var root = document.documentElement;
+                var style = document.getElementById(styleId);
+                var overlay = document.getElementById(overlayId);
+
+                if (!style) {
+                    style = document.createElement('style');
+                    style.id = styleId;
+                    (document.head || document.documentElement).appendChild(style);
+                }
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = overlayId;
+                    (document.body || document.documentElement).appendChild(overlay);
+                }
+
+                var targets = 'html,body,#react-root,main,[role="main"],[data-testid="primaryColumn"]';
+                var scrollbarTargets = targets.split(',').map(function(target) {
+                    return target + '::-webkit-scrollbar';
+                }).join(',');
+                var thumbTargets = targets.split(',').map(function(target) {
+                    return target + '::-webkit-scrollbar-thumb';
+                }).join(',');
+
+                style.textContent =
+                    targets + '{scrollbar-width:none!important;}' +
+                    scrollbarTargets + '{width:0!important;background:transparent!important;}' +
+                    thumbTargets + '{background:transparent!important;border-radius:999px!important;}' +
+                    '#' + overlayId + '{position:fixed;right:2px;top:0;width:4px;min-height:36px;' +
+                        'border-radius:999px;background:rgba(128,128,128,.42);opacity:0;' +
+                        'pointer-events:none;z-index:2147483647;transition:opacity .16s ease;}';
+
+                if (window._xtvTimelineScrollbarInstalled) {
+                    syncOverlay();
+                    return;
+                }
+                window._xtvTimelineScrollbarInstalled = true;
+
+                var scrollTimer = null;
+                function syncVisible() {
+                    overlay.style.opacity = root.classList.contains(scrollingClass) || root.classList.contains(hoverClass) ? '1' : '0';
+                }
+                function syncOverlay() {
+                    var scroller = document.scrollingElement || document.documentElement;
+                    var scrollTop = scroller.scrollTop || 0;
+                    var scrollHeight = scroller.scrollHeight || 0;
+                    var viewportHeight = window.innerHeight || root.clientHeight || 0;
+                    var maxScroll = Math.max(0, scrollHeight - viewportHeight);
+
+                    if (maxScroll <= 1 || viewportHeight <= 0) {
+                        overlay.style.opacity = '0';
+                        return;
+                    }
+
+                    var thumbHeight = Math.max(36, Math.round(viewportHeight * viewportHeight / scrollHeight));
+                    var thumbTop = Math.round((viewportHeight - thumbHeight) * scrollTop / maxScroll);
+                    overlay.style.height = thumbHeight + 'px';
+                    overlay.style.transform = 'translateY(' + thumbTop + 'px)';
+                    syncVisible();
+                }
+                function showWhileScrolling() {
+                    root.classList.add(scrollingClass);
+                    syncOverlay();
+                    clearTimeout(scrollTimer);
+                    scrollTimer = setTimeout(function() {
+                        root.classList.remove(scrollingClass);
+                        syncOverlay();
+                    }, 750);
+                }
+                function updateHover(e) {
+                    var nearRightEdge = window.innerWidth - e.clientX <= 20;
+                    root.classList.toggle(hoverClass, nearRightEdge);
+                    syncOverlay();
+                }
+
+                window.addEventListener('scroll', showWhileScrolling, true);
+                window.addEventListener('wheel', showWhileScrolling, { passive: true });
+                window.addEventListener('resize', syncOverlay, true);
+                window.addEventListener('keydown', function(e) {
+                    if (/^(ArrowUp|ArrowDown|PageUp|PageDown|Home|End|Space)$/.test(e.key)) {
+                        showWhileScrolling();
+                    }
+                }, true);
+                document.addEventListener('mousemove', updateHover, true);
+                document.addEventListener('mouseleave', function() {
+                    root.classList.remove(hoverClass);
+                    syncOverlay();
+                }, true);
+                syncOverlay();
+            })();
+            """;
+
+        private static async Task ApplyTimelineScrollbarAsync(WebView2 webView)
+        {
+            if (webView.CoreWebView2 is null) return;
+            await webView.CoreWebView2.ExecuteScriptAsync(BuildTimelineScrollbarJs());
+        }
+
         private async Task SaveTimelinesAsync()
         {
             Directory.CreateDirectory(Path.GetDirectoryName(SaveFilePath)!);
@@ -1513,6 +1616,7 @@ namespace XTimelineViewer
             webView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
             await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(KeyboardShortcutScript);
             await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(TweetInterceptScript);
+            await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(BuildTimelineScrollbarJs());
             webView.CoreWebView2.WebMessageReceived += (s, e) =>
                 OnWebViewMessageReceived(webView, e.TryGetWebMessageAsString());
 
@@ -1551,6 +1655,7 @@ namespace XTimelineViewer
                     await ApplyHideComposeAsync(webView, EffectiveHideCompose(cfg, webView.CoreWebView2.Source));
                     await ApplyHideListHeaderAsync(webView, IsListPageUrl(webView.CoreWebView2.Source));
                     await ApplyDimThemeAsync(webView);
+                    await ApplyTimelineScrollbarAsync(webView);
 
                     // TweetInterceptScript のフラグを設定と同期する
                     var flag = _appSettings.OpenTweetInBrowser ? "true" : "false";
