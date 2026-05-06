@@ -28,7 +28,7 @@ namespace XTimelineViewer
         public bool   SeparateComposeEnv    { get; set; } = false;
         public bool   OpenComposerInBrowser { get; set; } = false;
         public bool   OpenTweetInBrowser    { get; set; } = false;
-        public string Theme                 { get; set; } = "Default"; // "Light" | "Dark" | "Default"
+        public string Theme                 { get; set; } = "Default"; // "Light" | "Dark" | "Dim" | "Default"
         public int    AutoActivateMinutes   { get; set; } = 0;
         public string Language              { get; set; } = "system";  // "system" | "ja-JP" | "en-US"
     }
@@ -328,7 +328,7 @@ namespace XTimelineViewer
             ((FrameworkElement)Content).RequestedTheme = _appSettings.Theme switch
             {
                 "Light" => ElementTheme.Light,
-                "Dark"  => ElementTheme.Dark,
+                "Dark" or "Dim" => ElementTheme.Dark,
                 _       => ElementTheme.Default,
             };
             ApplyThemeToWebViews();
@@ -338,8 +338,8 @@ namespace XTimelineViewer
         {
             var themeCombo = new ComboBox
             {
-                ItemsSource   = new List<string> { R.Get("Theme_System"), R.Get("Theme_Light"), R.Get("Theme_Dark") },
-                SelectedIndex = _appSettings.Theme switch { "Light" => 1, "Dark" => 2, _ => 0 },
+                ItemsSource   = new List<string> { R.Get("Theme_System"), R.Get("Theme_Light"), R.Get("Theme_Dark"), R.Get("Theme_Dim") },
+                SelectedIndex = _appSettings.Theme switch { "Light" => 1, "Dark" => 2, "Dim" => 3, _ => 0 },
                 MinWidth      = 140
             };
 
@@ -541,7 +541,7 @@ namespace XTimelineViewer
 
             if (await dlg.ShowAsync() == ContentDialogResult.Primary)
             {
-                _appSettings.Theme = themeCombo.SelectedIndex switch { 1 => "Light", 2 => "Dark", _ => "Default" };
+                _appSettings.Theme = themeCombo.SelectedIndex switch { 1 => "Light", 2 => "Dark", 3 => "Dim", _ => "Default" };
                 _appSettings.OpenComposerInBrowser = openPostToggle.IsOn;
                 _appSettings.OpenTweetInBrowser    = openTweetToggle.IsOn;
                 _appSettings.AutoActivateMinutes   = (int)Math.Clamp(autoActivateBox.Value, 0, 60);
@@ -610,6 +610,7 @@ namespace XTimelineViewer
                 _                  => CoreWebView2PreferredColorScheme.Auto,
             };
             webView.CoreWebView2.Profile.PreferredColorScheme = scheme;
+            await ApplyDimThemeAsync(webView);
 
             bool composerReady = false;
 
@@ -617,6 +618,7 @@ namespace XTimelineViewer
             {
                 if (!args.IsSuccess) return;
                 composerReady = true;
+                await ApplyDimThemeAsync(webView);
                 await webView.CoreWebView2.ExecuteScriptAsync("""
                     (function() {
                         var id = 'xtv-compose-style';
@@ -704,18 +706,51 @@ namespace XTimelineViewer
             }
         }
 
-        private void ApplyThemeToWebViews()
+        private async void ApplyThemeToWebViews()
         {
-            var root   = (FrameworkElement)Content;
-            var scheme = root.RequestedTheme switch
+            var scheme = _appSettings.Theme switch
             {
-                ElementTheme.Light => CoreWebView2PreferredColorScheme.Light,
-                ElementTheme.Dark  => CoreWebView2PreferredColorScheme.Dark,
-                _                  => CoreWebView2PreferredColorScheme.Auto,
+                "Light" => CoreWebView2PreferredColorScheme.Light,
+                "Dark" or "Dim" => CoreWebView2PreferredColorScheme.Dark,
+                _       => CoreWebView2PreferredColorScheme.Auto,
             };
             foreach (var wv in _webViews)
                 if (wv.CoreWebView2 is not null)
+                {
                     wv.CoreWebView2.Profile.PreferredColorScheme = scheme;
+                    await ApplyDimThemeAsync(wv);
+                }
+        }
+
+        private bool IsDimTheme => _appSettings.Theme == "Dim";
+
+        private static string BuildDimThemeJs(bool enabled) => $$"""
+            (function(enabled) {
+                var id = 'xtv-dim-theme';
+                var existing = document.getElementById(id);
+                if (!enabled) {
+                    if (existing) existing.remove();
+                    return;
+                }
+                if (!existing) {
+                    existing = document.createElement('style');
+                    existing.id = id;
+                    document.head.appendChild(existing);
+                }
+                existing.textContent =
+                    'html,body,#react-root,' +
+                    '[data-testid="primaryColumn"],' +
+                    '[data-testid="sidebarColumn"],' +
+                    'main,section,' +
+                    'div[style*="background-color"]' +
+                    '{background-color:#15202A!important}';
+            })({{(enabled ? "true" : "false")}});
+            """;
+
+        private async Task ApplyDimThemeAsync(WebView2 webView)
+        {
+            if (webView.CoreWebView2 is null) return;
+            await webView.CoreWebView2.ExecuteScriptAsync(BuildDimThemeJs(IsDimTheme));
         }
 
         // ── Persistence ───────────────────────────────────────────────────────
@@ -1360,6 +1395,7 @@ namespace XTimelineViewer
                 {
                     await ApplyHideHeaderAsync(webView, cfg.HideHeader);
                     await ApplyHideComposeAsync(webView, EffectiveHideCompose(cfg, webView.CoreWebView2.Source));
+                    await ApplyDimThemeAsync(webView);
 
                     // TweetInterceptScript のフラグを設定と同期する
                     var flag = _appSettings.OpenTweetInBrowser ? "true" : "false";

@@ -16,6 +16,7 @@
   <data name="Theme_System" xml:space="preserve"><value>System</value></data>
   <data name="Theme_Light" xml:space="preserve"><value>Light</value></data>
   <data name="Theme_Dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="Theme_Dim" xml:space="preserve"><value>Dim</value></data>
 
   <!-- ToggleSwitch on/off labels -->
   <data name="Toggle_On" xml:space="preserve"><value>On</value></data>
