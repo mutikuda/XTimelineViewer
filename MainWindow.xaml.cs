@@ -30,6 +30,7 @@ namespace XTimelineViewer
         public bool   OpenTweetInBrowser    { get; set; } = false;
         public string Theme                 { get; set; } = "Default"; // "Light" | "Dark" | "Dim" | "Default"
         public int    AutoActivateMinutes   { get; set; } = 0;
+        public double TimelineSpacing       { get; set; } = 8;
         public string Language              { get; set; } = "system";  // "system" | "ja-JP" | "en-US"
     }
 
@@ -272,6 +273,7 @@ namespace XTimelineViewer
             Closed += async (s, e) => await SaveTimelinesAsync();
             ((FrameworkElement)Content).ActualThemeChanged += (s, e) => ApplyThemeToWebViews();
             LoadSettings();
+            ApplyTimelineSpacing();
             ApplySavedTheme();
             ApplyAutoActivateTimer();
             _ = RestoreTimelinesAsync();
@@ -288,6 +290,7 @@ namespace XTimelineViewer
             }
             catch { /* ファイルが存在しない場合などは無視 */ }
             _appSettings.SeparateComposeEnv = false; // 廃止予定: 強制無効化 (#17)
+            _appSettings.TimelineSpacing = Math.Clamp(_appSettings.TimelineSpacing, 0, 64);
         }
 
         private void SaveSettings()
@@ -321,6 +324,11 @@ namespace XTimelineViewer
                 }
             };
             _autoActivateTimer.Start();
+        }
+
+        private void ApplyTimelineSpacing()
+        {
+            TimelinePanel.Spacing = Math.Clamp(_appSettings.TimelineSpacing, 0, 64);
         }
 
         private void ApplySavedTheme()
@@ -451,6 +459,53 @@ namespace XTimelineViewer
                 Width                   = 160,
             };
             panel.Children.Add(MakeRow(R.Get("Settings_AutoActivate"), autoActivateBox));
+
+            var timelineSpacingSlider = new Slider
+            {
+                Value     = _appSettings.TimelineSpacing,
+                Minimum   = 0,
+                Maximum   = 64,
+                StepFrequency = 1,
+                Width     = 180
+            };
+            var timelineSpacingBox = new NumberBox
+            {
+                Value                   = _appSettings.TimelineSpacing,
+                Minimum                 = 0,
+                Maximum                 = 64,
+                SmallChange             = 1,
+                LargeChange             = 8,
+                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
+                Width                   = 96
+            };
+            var timelineSpacingControl = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing     = 8,
+                Margin      = new Thickness(12, 0, 0, 0)
+            };
+            timelineSpacingControl.Children.Add(timelineSpacingSlider);
+            timelineSpacingControl.Children.Add(timelineSpacingBox);
+
+            var syncingTimelineSpacing = false;
+            timelineSpacingSlider.ValueChanged += (_, args) =>
+            {
+                if (syncingTimelineSpacing) return;
+                syncingTimelineSpacing = true;
+                timelineSpacingBox.Value = Math.Round(args.NewValue);
+                syncingTimelineSpacing = false;
+            };
+            timelineSpacingBox.ValueChanged += (_, args) =>
+            {
+                if (syncingTimelineSpacing || double.IsNaN(args.NewValue)) return;
+                syncingTimelineSpacing = true;
+                var spacing = Math.Clamp(Math.Round(args.NewValue), 0, 64);
+                timelineSpacingSlider.Value = spacing;
+                timelineSpacingBox.Value = spacing;
+                syncingTimelineSpacing = false;
+            };
+
+            panel.Children.Add(MakeRow(R.Get("Settings_TimelineSpacing"), timelineSpacingControl));
             panel.Children.Add(new NavigationViewItemSeparator { Margin = new Thickness(0, 12, 0, 8) });
             panel.Children.Add(new TextBlock
             {
@@ -545,12 +600,14 @@ namespace XTimelineViewer
                 _appSettings.OpenComposerInBrowser = openPostToggle.IsOn;
                 _appSettings.OpenTweetInBrowser    = openTweetToggle.IsOn;
                 _appSettings.AutoActivateMinutes   = (int)Math.Clamp(autoActivateBox.Value, 0, 60);
+                _appSettings.TimelineSpacing       = Math.Clamp(Math.Round(timelineSpacingSlider.Value), 0, 64);
 
                 var newLang    = langValues[Math.Max(0, Math.Min(langCombo.SelectedIndex, langValues.Length - 1))];
                 var langChanged = newLang != _appSettings.Language;
                 _appSettings.Language = newLang;
 
                 SaveSettings();
+                ApplyTimelineSpacing();
                 ApplySavedTheme();
 
                 var flag = _appSettings.OpenTweetInBrowser ? "true" : "false";
@@ -843,7 +900,7 @@ namespace XTimelineViewer
             var pane = new Grid
             {
                 Width             = cfg.Width,
-                Margin            = new Thickness(4),
+                Margin            = new Thickness(0, 4, 0, 4),
                 VerticalAlignment = VerticalAlignment.Stretch,
                 BorderThickness   = new Thickness(1),
                 CornerRadius      = new CornerRadius(8)

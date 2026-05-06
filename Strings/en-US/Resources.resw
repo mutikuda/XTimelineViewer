@@ -35,6 +35,7 @@
   <data name="Settings_OpenComposerInBrowser" xml:space="preserve"><value>Open Composer in External Browser</value></data>
   <data name="Settings_OpenTweetInBrowser" xml:space="preserve"><value>Open Tweets in External Browser</value></data>
   <data name="Settings_AutoActivate" xml:space="preserve"><value>Auto-activate Home Timeline (min, 0 to disable)</value></data>
+  <data name="Settings_TimelineSpacing" xml:space="preserve"><value>Timeline Spacing (px)</value></data>
 
   <!-- Language selector items -->
   <data name="Language_System" xml:space="preserve"><value>System Language</value></data>

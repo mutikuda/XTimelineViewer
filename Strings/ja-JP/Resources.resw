@@ -35,6 +35,7 @@
   <data name="Settings_OpenComposerInBrowser" xml:space="preserve"><value>新規投稿を外部ブラウザーで開く</value></data>
   <data name="Settings_OpenTweetInBrowser" xml:space="preserve"><value>ツイートを外部ブラウザーで開く</value></data>
   <data name="Settings_AutoActivate" xml:space="preserve"><value>ホームタイムラインを定期的にアクティブ化（分、0 で無効）</value></data>
+  <data name="Settings_TimelineSpacing" xml:space="preserve"><value>タイムライン間のスペース（px）</value></data>
 
   <!-- Language selector items -->
   <data name="Language_System" xml:space="preserve"><value>システム言語</value></data>
