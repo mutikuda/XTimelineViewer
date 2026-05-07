@@ -1065,6 +1065,14 @@ namespace XTimelineViewer
             };
             Grid.SetColumn(buttonPanel, 1);
 
+            var refreshBtn = new Button
+            {
+                Content = new FontIcon { Glyph = "\uE72C", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 14 },
+                Width = 28, Height = 26,
+                Padding = new Thickness(0)
+            };
+            ToolTipService.SetToolTip(refreshBtn, R.Get("Pane_Refresh_Tooltip"));
+
             var settingsBtn = new Button
             {
                 Content = new FontIcon { Glyph = "\uE713", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 14 },
@@ -1080,6 +1088,7 @@ namespace XTimelineViewer
             };
             ToolTipService.SetToolTip(closeBtn, R.Get("Pane_Close_Tooltip"));
 
+            buttonPanel.Children.Add(refreshBtn);
             buttonPanel.Children.Add(settingsBtn);
             buttonPanel.Children.Add(closeBtn);
 
@@ -1115,6 +1124,23 @@ namespace XTimelineViewer
             {
                 _focusedHeaderGrid = headerGrid;
                 foreach (var r in _headerRefreshers) r();
+            };
+
+            refreshBtn.Click += (s, _) =>
+            {
+                SetFocus();
+
+                try
+                {
+                    if (webView.CoreWebView2 is not null)
+                    {
+                        webView.CoreWebView2.Reload();
+                        return;
+                    }
+                }
+                catch { }
+
+                webView.Source = new Uri(cfg.Url);
             };
 
             // ── Drag & Drop reorder ───────────────────────────────────────────
